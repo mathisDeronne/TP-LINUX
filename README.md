@@ -1,0 +1,2 @@
+# Pour les tp 1,2 et 3 :
+les tp 1,2 et 3 ne sont pas sur ce repo (mon pc avait cramé) je les avait fait avec océane et le travail à été rendu sur son repo [ici](https://github.com/Ocersl33/Rendu_TP_Linux)
