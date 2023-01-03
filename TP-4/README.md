@@ -163,20 +163,18 @@ success
 
 🌞 Vérifier les logs d'accès
 
-```
 ![service logs access](image/logs_access.png)
 
 
 5. Modif de la conf du serveur web
+
 🌞 Changer le port d'écoute
 
 .une simple ligne à modifier, vous me la montrerez dans le compte rendu
 
 ```
-
 [root@loalhost /]$ sudo cat /etc/nginx/nginx.conf | grep 8080
         listen       8080;
-
 ```
 .prouvez-moi que le changement a pris effet avec une commande ss
 ```
@@ -191,7 +189,6 @@ tcp   LISTEN 0      511          0.0.0.0:8080       0.0.0.0:*    users:(("nginx"
 ```
  
 .prouvez avec une commande curl sur votre machine que vous pouvez désormais visiter le port 8080
-```
 ```
 [root@localhost /]$ curl http://10.3.1.53:8080 | head -n 7
 
