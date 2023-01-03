@@ -88,7 +88,7 @@ mount: /dev/storage/mountplace does not contain SELinux labels.
 
 🌞 Donnez les commandes réalisées sur le serveur NFS storage.tp4.linux
 
-```powershell
+```
 [oceane@localhost ~]$ sudo cat /etc/exports
 /mnt/storage_1/site_web_1       10.3.1.53(rm,sync,no_subtree_check)
 /mnt/storage_1/site_web_2       10.3.1.53(rm,sync,no_subtree_check)
