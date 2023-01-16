@@ -477,11 +477,183 @@ enabled
   </body>
 </html>
 ```
-- vérifier depuis votre PC que vous accéder à la page par défaut
+## 2. Avancer vers la maîtrise du service
 
- ```
- mathi@DELLG3 MINGW64 ~
-$ curl 10.105.1.11
+🌞 **Le service Apache...**
+
+- affichez le contenu du fichier `httpd.service` qui contient la définition du service Apache
+```
+[user@localhost conf]$ cat httpd.conf
+
+ServerRoot "/etc/httpd"
+
+Listen 80
+
+Include conf.modules.d/*.conf
+
+User apache
+Group apache
+
+
+ServerAdmin root@localhost
+
+
+<Directory />
+    AllowOverride none
+    Require all denied
+</Directory>
+
+
+DocumentRoot "/var/www/html"
+
+<Directory "/var/www">
+    AllowOverride None
+    Require all granted
+</Directory>
+
+<Directory "/var/www/html">
+    Options Indexes FollowSymLinks
+
+    AllowOverride None
+
+    Require all granted
+</Directory>
+
+<IfModule dir_module>
+    DirectoryIndex index.html
+</IfModule>
+
+<Files ".ht*">
+    Require all denied
+</Files>
+
+ErrorLog "logs/error_log"
+
+LogLevel warn
+
+<IfModule log_config_module>
+    LogFormat "%h %l %u %t \"%r\" %>s %b \"%{Referer}i\" \"%{User-Agent}i\"" combined
+    LogFormat "%h %l %u %t \"%r\" %>s %b" common
+
+    <IfModule logio_module>
+      LogFormat "%h %l %u %t \"%r\" %>s %b \"%{Referer}i\" \"%{User-Agent}i\" %I %O" combinedio
+    </IfModule>
+
+
+    CustomLog "logs/access_log" combined
+</IfModule>
+
+<IfModule alias_module>
+
+
+    ScriptAlias /cgi-bin/ "/var/www/cgi-bin/"
+
+</IfModule>
+
+<Directory "/var/www/cgi-bin">
+    AllowOverride None
+    Options None
+    Require all granted
+</Directory>
+
+<IfModule mime_module>
+    TypesConfig /etc/mime.types
+
+    AddType application/x-compress .Z
+    AddType application/x-gzip .gz .tgz
+
+
+
+    AddType text/html .shtml
+    AddOutputFilter INCLUDES .shtml
+</IfModule>
+
+AddDefaultCharset UTF-8
+
+<IfModule mime_magic_module>
+    MIMEMagicFile conf/magic
+</IfModule>
+
+
+EnableSendfile on
+
+IncludeOptional conf.d/*.conf
+```
+
+🌞 **Déterminer sous quel utilisateur tourne le processus Apache**
+
+- mettez en évidence la ligne dans le fichier de conf principal d'Apache (`httpd.conf`) qui définit quel user est utilisé
+```
+[user@localhost conf]$ cat httpd.conf | grep -i "user" | head -n 1
+User apache
+```
+- utilisez la commande `ps -ef` pour visualiser les processus en cours d'exécution et confirmer que apache tourne bien sous l'utilisateur mentionné dans le fichier de conf
+```
+[user@localhost conf]$ ps -ef | grep apache
+apache       761     728  0 09:33 ?        00:00:00 /usr/sbin/httpd -DFOREGROUND
+apache       763     728  0 09:33 ?        00:00:07 /usr/sbin/httpd -DFOREGROUND
+apache       764     728  0 09:33 ?        00:00:07 /usr/sbin/httpd -DFOREGROUND
+apache       765     728  0 09:33 ?        00:00:07 /usr/sbin/httpd -DFOREGROUND
+user        1562    1412  0 11:25 pts/0    00:00:00 grep --color=auto apache
+```
+- la page d'accueil d'Apache se trouve dans `/usr/share/testpage/`
+  - vérifiez avec un `ls -al` que tout son contenu est **accessible en lecture** à l'utilisateur mentionné dans le fichier de conf
+```
+ [user@localhost testpage]$ ls -al
+ total 12
+drwxr-xr-x.  2 root root   24 Jan  3 16:17 .
+drwxr-xr-x. 82 root root 4096 Jan  3 16:17 ..
+-rw-r--r--.  1 root root 7620 Jul 27 20:05 index.html
+```
+
+🌞 **Changer l'utilisateur utilisé par Apache**
+
+- créez un nouvel utilisateur
+
+```
+[user@localhost ~]$ sudo adduser user2 -d /usr/share/httpd -s /sbin/nologin
+[sudo] password for user:
+adduser: warning: the home directory /usr/share/httpd already exists.
+adduser: Not copying any file from skel directory into it.
+[user@localhost ~]$ cat /etc/passwd | grep user2
+user2:x:1001:1001::/home/user2:/bin/bash
+```
+```
+[user@localhost conf]$ cat httpd.conf | grep user1
+User user1
+[user@localhost ~]$ ps -ef | grep httpd
+root         729       1  0 09:55 ?        00:00:00 /usr/sbin/httpd -DFOREGROUND
+user1        758     729  0 09:55 ?        00:00:00 /usr/sbin/httpd -DFOREGROUND
+user1        759     729  0 09:55 ?        00:00:00 /usr/sbin/httpd -DFOREGROUND
+user1        760     729  0 09:55 ?        00:00:00 /usr/sbin/httpd -DFOREGROUND
+user1        761     729  0 09:55 ?        00:00:00 /usr/sbin/httpd -DFOREGROUND
+user        1465    1447  0 09:57 pts/0    00:00:00 grep --color=auto httpd
+```
+🌞 **Faites en sorte que Apache tourne sur un autre port**
+
+- modifiez la configuration d'Apache pour lui demander d'écouter sur un autre port de votre choix
+  - montrez la ligne de conf dans le compte rendu, avec un `grep` pour ne montrer que la ligne importante
+```
+[user@localhost conf]$ cat httpd.conf | grep -i listen
+Listen 222
+```
+- ouvrez ce nouveau port dans le firewall, et fermez l'ancien
+```
+[user@localhost conf]$ sudo firewall-cmd --add-port=222/tcp --permanent
+success
+[user@localhost conf]$ sudo firewall-cmd --remove-port=80/tcp --permanent
+success
+```
+- redémarrez Apache
+- prouvez avec une commande `ss` que Apache tourne bien sur le nouveau port choisi
+```
+[user@localhost ~]$ sudo ss -alntp | grep httpd
+[sudo] password for user:
+LISTEN 0      511                *:222             *:*    users:(("httpd",pid=749,fd=4),("httpd",pid=748,fd=4),("httpd",pid=746,fd=4),("httpd",pid=729,fd=4))
+```
+- vérifiez avec `curl` en local que vous pouvez joindre Apache sur le nouveau port
+```
+[user@localhost ~]$ curl localhost:222 | head -5
   % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
                                  Dload  Upload   Total   Spent    Left  Speed
   0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0<!doctype html>
@@ -489,348 +661,42 @@ $ curl 10.105.1.11
   <head>
     <meta charset='utf-8'>
     <meta name='viewport' content='width=device-width, initial-scale=1'>
-    <title>HTTP Server Test Page powered by: Rocky Linux</title>
-    <style type="text/css">
-      /*<![CDATA[*/
+100  7620  100  7620    0     0  3720k      0 --:--:-- --:--:-- --:--:-- 7441k
+curl: (23) Failed writing body
+```
+# Partie 2 : Mise en place et maîtrise du serveur de base de données
+| Machines        | IP            | Service                 |
+|-----------------|---------------|-------------------------|
+| `web.tp5.linux` | `10.105.1.11` | Serveur Web             |
+| `db.tp5.linux`  | `10.105.1.12` | Serveur Base de Données |
 
-      html {
-        height: 100%;
-        width: 100%;
-      }
-        body {
-  background: rgb(20,72,50);
-  background: -moz-linear-gradient(180deg, rgba(23,43,70,1) 30%, rgba(0,0,0,1) 90%)  ;
-  background: -webkit-linear-gradient(180deg, rgba(23,43,70,1) 30%, rgba(0,0,0,1) 90%) ;
-  background: linear-gradient(180deg, rgba(23,43,70,1) 30%, rgba(0,0,0,1) 90%);
-  background-repeat: no-repeat;
-  background-attachment: fixed;
-  filter: progid:DXImageTransform.Microsoft.gradient(startColorstr="#3c6eb4",endColorstr="#3c95b4",GradientType=1);
-        color: white;
-        font-size: 0.9em;
-        font-weight: 400;
-        font-family: 'Montserrat', sans-serif;
-        margin: 0;
-        padding: 10em 6em 10em 6em;
-        box-sizing: border-box;
+🌞 **Install de MariaDB sur `db.tp5.linux`**
+```
+[user@localhost ~]$ sudo dnf install mariadb-server
+[sudo] password for user:
+[...]
+Complete!
+```
 
-      }
+🌞 **Port utilisé par MariaDB**
 
+```
+[user@localhost ~]$ sudo systemctl enable mariadb
+Created symlink /etc/systemd/system/mysql.service → /usr/lib/systemd/system/mariadb.service.
+Created symlink /etc/systemd/system/mysqld.service → /usr/lib/systemd/system/mariadb.service.
+Created symlink /etc/systemd/system/multi-user.target.wants/mariadb.service → /usr/lib/systemd/system/mariadb.service.
+```
+```
+[user@localhost ~]$ sudo mysql_secure_installation
+```
+```
+[user@localhost ~]$ sudo ss -alptn |grep mariadb
+LISTEN 0      80                 *:3306            *:*    users:(("mariadbd",pid=4483,fd=19))
+```
+🌞 **Processus liés à MariaDB**
 
-  h1 {
-    text-align: center;
-    margin: 0;
-    padding: 0.6em 2em 0.4em;
-    color: #fff;
-    font-weight: bold;
-    font-family: 'Montserrat', sans-serif;
-    font-size: 2em;
-  }
-  h1 strong {
-    font-weight: bolder;
-    font-family: 'Montserrat', sans-serif;
-  }
-  h2 {
-    font-size: 1.5em;
-    font-weight:bold;
-  }
-
-  .title {
-    border: 1px solid black;
-    font-weight: bold;
-    position: relative;
-    float: right;
-    width: 150px;
-    text-align: center;
-    padding: 10px 0 10px 0;
-    margin-top: 0;
-  }
-
-  .description {
-    padding: 45px 10px 5px 10px;
-    clear: right;
-    padding: 15px;
-  }
-
-  .section {
-    padding-left: 3%;
-   margin-bottom: 10px;
-  }
-
-  img {
-
-    padding: 2px;
-    margin: 2px;
-  }
-  a:hover img {
-    padding: 2px;
-    margin: 2px;
-  }
-
-  :link {
-    color: rgb(199, 252, 77);
-    text-shadow:
-  }
-  :visited {
-    color: rgb(122, 206, 255);
-  }
-  a:hover {
-    color: rgb(16, 44, 122);
-  }
-  .row {
-    width: 100%;
-    padding: 0 10px 0 10px;
-  }
-
-  footer {
-    padding-top: 6em;
-    margin-bottom: 6em;
-    text-align: center;
-    font-size: xx-small;
-    overflow:hidden;
-    clear: both;
-  }
-
-  .summary {
-    font-size: 140%;
-    text-align: center;
-  }
-
-  #rocky-poweredby img {
-    margin-left: -10px;
-  }
-
-  #logos img {
-    vertical-align: top;
-  }
-
-  /* Desktop  View Options */
-
-  @media (min-width: 768px)  {
-
-    body {
-      padding: 10em 20% !important;
-    }
-
-    .col-md-1, .col-md-2, .col-md-3, .col-md-4, .col-md-5, .col-md-6,
-    .col-md-7, .col-md-8, .col-md-9, .col-md-10, .col-md-11, .col-md-12 {
-      float: left;
-    }
-
-    .col-md-1 {
-      width: 8.33%;
-    }
-    .col-md-2 {
-      width: 16.66%;
-    }
-    .col-md-3 {
-      width: 25%;
-    }
-    .col-md-4 {
-      width: 33%;
-    }
-    .col-md-5 {
-      width: 41.66%;
-    }
-    .col-md-6 {
-      border-left:3px ;
-      width: 50%;
-
-
-    }
-    .col-md-7 {
-      width: 58.33%;
-    }
-    .col-md-8 {
-      width: 66.66%;
-    }
-    .col-md-9 {
-      width: 74.99%;
-    }
-    .col-md-10 {
-      width: 83.33%;
-    }
-    .col-md-11 {
-      width: 91.66%;
-    }
-    .col-md-12 {
-      width: 100%;
-    }
-  }
-
-  /* Mobile View Options */
-  @media (max-width: 767px) {
-    .col-sm-1, .col-sm-2, .col-sm-3, .col-sm-4, .col-sm-5, .col-sm-6,
-    .col-sm-7, .col-sm-8, .col-sm-9, .col-sm-10, .col-sm-11, .col-sm-12 {
-      float: left;
-    }
-
-    .col-sm-1 {
-      width: 8.33%;
-    }
-    .col-sm-2 {
-      width: 16.66%;
-    }
-    .col-sm-3 {
-      width: 25%;
-    }
-    .col-sm-4 {
-      width: 33%;
-    }
-    .col-sm-5 {
-      width: 41.66%;
-    }
-    .col-sm-6 {
-      width: 50%;
-    }
-    .col-sm-7 {
-      width: 58.33%;
-    }
-    .col-sm-8 {
-      width: 66.66%;
-    }
-    .col-sm-9 {
-      width: 74.99%;
-    }
-    .col-sm-10 {
-      width: 83.33%;
-    }
-    .col-sm-11 {
-      width: 91.66%;
-    }
-    .col-sm-12 {
-      width: 100%;
-    }
-    h1 {
-      padding: 0 !important;
-    }
-  }
-
-
-  </style>
-  </head>
-  <body>
-    <h1>HTTP Server <strong>Test Page</strong></h1>
-
-100  7620  100  7620    0     0  1876k      0 --:--:-- --:--:-- --:--:-- 2480krow'>
-
-      <div class='col-sm-12 col-md-6 col-md-6 '></div>
-          <p class="summary">This page is used to test the proper operation of
-            an HTTP server after it has been installed on a Rocky Linux system.
-            If you can read this page, it means that the software is working
-            correctly.</p>
-      </div>
-
-      <div class='col-sm-12 col-md-6 col-md-6 col-md-offset-12'>
-
-
-        <div class='section'>
-          <h2>Just visiting?</h2>
-
-          <p>This website you are visiting is either experiencing problems or
-          could be going through maintenance.</p>
-
-          <p>If you would like the let the administrators of this website know
-          that you've seen this page instead of the page you've expected, you
-          should send them an email. In general, mail sent to the name
-          "webmaster" and directed to the website's domain should reach the
-          appropriate person.</p>
-
-          <p>The most common email address to send to is:
-          <strong>"webmaster@example.com"</strong></p>
-
-          <h2>Note:</h2>
-          <p>The Rocky Linux distribution is a stable and reproduceable platform
-          based on the sources of Red Hat Enterprise Linux (RHEL). With this in
-          mind, please understand that:
-
-        <ul>
-          <li>Neither the <strong>Rocky Linux Project</strong> nor the
-          <strong>Rocky Enterprise Software Foundation</strong> have anything to
-          do with this website or its content.</li>
-          <li>The Rocky Linux Project nor the <strong>RESF</strong> have
-          "hacked" this webserver: This test page is included with the
-          distribution.</li>
-        </ul>
-        <p>For more information about Rocky Linux, please visit the
-          <a href="https://rockylinux.org/"><strong>Rocky Linux
-          website</strong></a>.
-        </p>
-        </div>
-      </div>
-      <div class='col-sm-12 col-md-6 col-md-6 col-md-offset-12'>
-        <div class='section'>
-
-          <h2>I am the admin, what do I do?</h2>
-
-        <p>You may now add content to the webroot directory for your
-        software.</p>
-
-        <p><strong>For systems using the
-        <a href="https://httpd.apache.org/">Apache Webserver</strong></a>:
-        You can add content to the directory <code>/var/www/html/</code>.
-        Until you do so, people visiting your website will see this page. If
-        you would like this page to not be shown, follow the instructions in:
-        <code>/etc/httpd/conf.d/welcome.conf</code>.</p>
-
-        <p><strong>For systems using
-        <a href="https://nginx.org">Nginx</strong></a>:
-        You can add your content in a location of your
-        choice and edit the <code>root</code> configuration directive
-        in <code>/etc/nginx/nginx.conf</code>.</p>
-
-        <div id="logos">
-          <a href="https://rockylinux.org/" id="rocky-poweredby"><img src="icons/poweredby.png" alt="[ Powered by Rocky Linux ]" /></a> <!-- Rocky -->
-          <img src="poweredby.png" /> <!-- webserver -->
-        </div>
-      </div>
-      </div>
-
-      <footer class="col-sm-12">
-      <a href="https://apache.org">Apache&trade;</a> is a registered trademark of <a href="https://apache.org">the Apache Software Foundation</a> in the United States and/or other countries.<br />
-      <a href="https://nginx.org">NGINX&trade;</a> is a registered trademark of <a href="https://">F5 Networks, Inc.</a>.
-      </footer>
-
-  </body>
-</html>
-
- ```
-
-## 2. Avancer vers la maîtrise du service
-
-🌞 **Le service Apache...**
-
-- affichez le contenu du fichier `httpd.service` qui contient la définition du service Apache
-
-🌞 **Déterminer sous quel utilisateur tourne le processus Apache**
-
-- mettez en évidence la ligne dans le fichier de conf principal d'Apache (`httpd.conf`) qui définit quel user est utilisé
-- utilisez la commande `ps -ef` pour visualiser les processus en cours d'exécution et confirmer que apache tourne bien sous l'utilisateur mentionné dans le fichier de conf
-  - filtrez les infos importantes avec un `| grep`
-- la page d'accueil d'Apache se trouve dans `/usr/share/testpage/`
-  - vérifiez avec un `ls -al` que tout son contenu est **accessible en lecture** à l'utilisateur mentionné dans le fichier de conf
-
-🌞 **Changer l'utilisateur utilisé par Apache**
-
-- créez un nouvel utilisateur
-  - pour les options de création, inspirez-vous de l'utilisateur Apache existant
-    - le fichier `/etc/passwd` contient les informations relatives aux utilisateurs existants sur la machine
-    - servez-vous en pour voir la config actuelle de l'utilisateur Apache par défaut (son homedir et son shell en particulier)
-- modifiez la configuration d'Apache pour qu'il utilise ce nouvel utilisateur
-  - montrez la ligne de conf dans le compte rendu, avec un `grep` pour ne montrer que la ligne importante
-- redémarrez Apache
-- utilisez une commande `ps` pour vérifier que le changement a pris effet
-  - vous devriez voir un processus au moins qui tourne sous l'identité de votre nouvel utilisateur
-
-🌞 **Faites en sorte que Apache tourne sur un autre port**
-
-- modifiez la configuration d'Apache pour lui demander d'écouter sur un autre port de votre choix
-  - montrez la ligne de conf dans le compte rendu, avec un `grep` pour ne montrer que la ligne importante
-- ouvrez ce nouveau port dans le firewall, et fermez l'ancien
-- redémarrez Apache
-- prouvez avec une commande `ss` que Apache tourne bien sur le nouveau port choisi
-- vérifiez avec `curl` en local que vous pouvez joindre Apache sur le nouveau port
-- vérifiez avec votre navigateur que vous pouvez joindre le serveur sur le nouveau port
-
-📁 **Fichier `/etc/httpd/conf/httpd.conf`**
-
-➜ **Si c'est tout bon vous pouvez passer à [la partie 2.](../part2/README.md)**
+```
+[user@localhost ~]$ ps -ef | grep mariadb
+mysql       4483       1  7 10:51 ?        00:00:16 /usr/libexec/mariadbd --basedir=/usr
+user        4582    1228  0 10:55 pts/0    00:00:00 grep --color=auto mariadb
+```
